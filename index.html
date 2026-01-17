@@ -4,147 +4,153 @@
 <meta charset="UTF-8">
 <title>NIC Forms Analytics Dashboard</title>
 
-<!-- Bootstrap -->
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-
-<!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-<!-- Leaflet -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
 <style>
-  body { background:#f4f6f9; }
-  #map { height: 320px; }
+body { background:#f4f6f9; }
+.card { margin-bottom: 20px; }
+.summary { border-left:5px solid #0d6efd; }
 </style>
 </head>
 
 <body>
 
 <div class="container mt-4">
-  <h3 class="mb-4">NIC Forms Analytics Dashboard</h3>
+  <h3 class="mb-3">NIC Forms – Card Issuance Analytics Dashboard</h3>
 
-  <!-- Summary Cards -->
-  <div class="row mb-4">
-    <div class="col-md-4">
-      <div class="card text-center p-3">
-        <h6>Total Submissions</h6>
-        <h4 id="totalRecords">0</h4>
-      </div>
-    </div>
-    <div class="col-md-4">
-      <div class="card text-center p-3">
-        <h6>Total Cards Issued</h6>
-        <h4 id="totalCards">0</h4>
-      </div>
-    </div>
-    <div class="col-md-4">
-      <div class="card text-center p-3">
-        <h6>Active Operators</h6>
-        <h4 id="totalUsers">0</h4>
-      </div>
-    </div>
+  <!-- TOTAL -->
+  <div class="card p-4 text-center summary mb-4">
+    <h5>Total Number of Cards Issued</h5>
+    <h2 id="totalCards">0</h2>
   </div>
 
-  <!-- Chart -->
-  <div class="card p-3 mb-4">
-    <h5>Cards Issued Per Operator</h5>
-    <canvas id="cardsChart"></canvas>
-  </div>
-
+  <!-- Charts Row 1 -->
   <div class="row">
-    <!-- Table -->
-    <div class="col-md-7">
+    <div class="col-md-6">
       <div class="card p-3">
-        <h5>Submission Details</h5>
-        <table class="table table-bordered table-sm">
-          <thead class="table-light">
-            <tr>
-              <th>Name</th>
-              <th>CSC ID</th>
-              <th>Cards Issued</th>
-              <th>Date</th>
-            </tr>
-          </thead>
-          <tbody id="dataTable"></tbody>
-        </table>
+        <h5>Cards Issued vs Area</h5>
+        <canvas id="areaChart"></canvas>
       </div>
     </div>
+    <div class="col-md-6">
+      <div class="card p-3">
+        <h5>Top 10 VLEs by Cards Issued</h5>
+        <canvas id="vleChart"></canvas>
+      </div>
+    </div>
+  </div>
 
-    <!-- Map -->
-    <div class="col-md-5">
+  <!-- Charts Row 2 -->
+  <div class="row">
+    <div class="col-md-6">
       <div class="card p-3">
-        <h5>Location Map</h5>
-        <div id="map"></div>
+        <h5>This Week – Cards Issued per Date</h5>
+        <canvas id="weekDateChart"></canvas>
       </div>
     </div>
+    <div class="col-md-6">
+      <div class="card p-3">
+        <h5>This Month – Cards Issued per Week</h5>
+        <canvas id="monthWeekChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="card p-3">
+    <h5>Top 10 Card Issuers</h5>
+    <table class="table table-bordered table-sm">
+      <thead class="table-light">
+        <tr>
+          <th>VLE Name</th>
+          <th>No. of Cards Issued</th>
+          <th>Area</th>
+        </tr>
+      </thead>
+      <tbody id="topTable"></tbody>
+    </table>
   </div>
 </div>
 
 <script>
-const API_URL = "https://nicforms.nic.in/nicforms_designer/api/api.php?form_id=enRhYmxlNjk2YmM0NjUzOTIwZDIwMjYwMTE3MTE=&serviceCode=d6fc2b65bcbcae2a8a8c29aa5b9587e0427b34899d0efbd66f236cbe8a2301d7&recordNo=0";
+const API_URL =
+"https://nicforms.nic.in/nicforms_designer/api/api.php?form_id=enRhYmxlNjk2YmM0NjUzOTIwZDIwMjYwMTE3MTE=&serviceCode=d6fc2b65bcbcae2a8a8c29aa5b9587e0427b34899d0efbd66f236cbe8a2301d7&recordNo=0";
 
 fetch(API_URL)
-  .then(res => res.json())
-  .then(data => {
-    const records = data.output || [];
+.then(res => res.json())
+.then(data => {
+  const records = data.output || [];
+  const today = new Date();
+  const currentWeekStart = new Date(today);
+  currentWeekStart.setDate(today.getDate() - today.getDay());
 
-    document.getElementById("totalRecords").innerText = records.length;
+  let grandTotal = 0;
+  const areaTotals = {};
+  const vleTotals = {};
+  const weekDateTotals = {};
+  const monthWeekTotals = { "Week 1":0,"Week 2":0,"Week 3":0,"Week 4":0,"Week 5":0 };
 
-    let totalCards = 0;
-    let users = new Set();
+  records.forEach(r => {
+    const vle = r["ENTER YOUR NAME "] || "Unknown";
+    const area = r["Select"] || "Unknown Area";
+    const cards = Number(r["TOTAL NUMBER OF THE CARD ISSUE TODAY "] || 0);
+    const date = new Date(r["Date Field"]);
 
-    const labels = [];
-    const values = [];
+    grandTotal += cards;
 
-    records.forEach(r => {
-      totalCards += Number(r["TOTAL NUMBER OF THE CARD ISSUE TODAY "] || 0);
-      users.add(r["ENTER YOUR NAME "]);
+    areaTotals[area] = (areaTotals[area] || 0) + cards;
 
-      labels.push(r["ENTER YOUR NAME "]);
-      values.push(Number(r["TOTAL NUMBER OF THE CARD ISSUE TODAY "] || 0));
+    if (!vleTotals[vle]) vleTotals[vle] = { cards:0, area };
+    vleTotals[vle].cards += cards;
 
-      document.getElementById("dataTable").innerHTML += `
-        <tr>
-          <td>${r["ENTER YOUR NAME "]}</td>
-          <td>${r["ENTER YOUR CSC ID"] || ""}</td>
-          <td>${r["TOTAL NUMBER OF THE CARD ISSUE TODAY "]}</td>
-          <td>${r.insertDate}</td>
-        </tr>
-      `;
-    });
+    // This week date-wise
+    if (date >= currentWeekStart) {
+      const d = date.toISOString().split("T")[0];
+      weekDateTotals[d] = (weekDateTotals[d] || 0) + cards;
+    }
 
-    document.getElementById("totalCards").innerText = totalCards;
-    document.getElementById("totalUsers").innerText = users.size;
+    // This month week-wise
+    if (date.getMonth() === today.getMonth()) {
+      const weekNo = Math.ceil(date.getDate() / 7);
+      monthWeekTotals["Week " + weekNo] += cards;
+    }
+  });
 
-    // Chart
-    new Chart(document.getElementById("cardsChart"), {
-      type: "bar",
-      data: {
-        labels: labels,
-        datasets: [{
-          label: "Cards Issued",
-          data: values
-        }]
-      }
-    });
+  document.getElementById("totalCards").innerText = grandTotal;
 
-    // Map
-    const map = L.map('map').setView([20, 78], 5);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+  // Area Chart
+  new Chart(areaChart, {
+    type: "bar",
+    data: { labels:Object.keys(areaTotals), datasets:[{label:"Cards Issued", data:Object.values(areaTotals)}] }
+  });
 
-    records.forEach(r => {
-      if (r.latitude && r.longitude) {
-        L.marker([r.latitude, r.longitude])
-          .addTo(map)
-          .bindPopup(
-            `<b>${r["ENTER YOUR NAME "]}</b><br>Cards: ${r["TOTAL NUMBER OF THE CARD ISSUE TODAY "]}`
-          );
-      }
-    });
-  })
-  .catch(err => alert("Error loading data"));
+  // Top 10 VLE
+  const topVLE = Object.entries(vleTotals).sort((a,b)=>b[1].cards-a[1].cards).slice(0,10);
+  new Chart(vleChart, {
+    type: "bar",
+    data: { labels:topVLE.map(v=>v[0]), datasets:[{label:"Cards Issued", data:topVLE.map(v=>v[1].cards)}] }
+  });
+
+  // Week Date Chart
+  new Chart(weekDateChart, {
+    type: "line",
+    data: { labels:Object.keys(weekDateTotals), datasets:[{label:"Cards Issued", data:Object.values(weekDateTotals)}] }
+  });
+
+  // Month Week Chart
+  new Chart(monthWeekChart, {
+    type: "bar",
+    data: { labels:Object.keys(monthWeekTotals), datasets:[{label:"Cards Issued", data:Object.values(monthWeekTotals)}] }
+  });
+
+  // Table
+  const table = document.getElementById("topTable");
+  topVLE.forEach(v=>{
+    table.innerHTML += `<tr><td>${v[0]}</td><td>${v[1].cards}</td><td>${v[1].area}</td></tr>`;
+  });
+})
+.catch(()=>alert("Error loading dashboard"));
 </script>
 
 </body>

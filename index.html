@@ -17,16 +17,15 @@ body { background:#f4f6f9; }
 <body>
 
 <div class="container mt-4">
-  <h3 class="mb-3">NIC Forms – Card Issuance Analytics Dashboard</h3>
+  <h3>NIC Forms – Card Issuance Analytics Dashboard</h3>
 
   <!-- TOTAL -->
-  <div class="card p-4 text-center summary mb-4">
-    <h5>Total Number of Cards Issued</h5>
+  <div class="card p-4 text-center summary">
+    <h5>Total Cards Issued</h5>
     <h2 id="totalCards">0</h2>
   </div>
 
-  <!-- Charts Row 1 -->
-  <div class="row">
+  <div class="row mt-3">
     <div class="col-md-6">
       <div class="card p-3">
         <h5>Cards Issued vs Area</h5>
@@ -41,30 +40,28 @@ body { background:#f4f6f9; }
     </div>
   </div>
 
-  <!-- Charts Row 2 -->
   <div class="row">
     <div class="col-md-6">
       <div class="card p-3">
         <h5>This Week – Cards Issued per Date</h5>
-        <canvas id="weekDateChart"></canvas>
+        <canvas id="weekChart"></canvas>
       </div>
     </div>
     <div class="col-md-6">
       <div class="card p-3">
         <h5>This Month – Cards Issued per Week</h5>
-        <canvas id="monthWeekChart"></canvas>
+        <canvas id="monthChart"></canvas>
       </div>
     </div>
   </div>
 
-  <!-- Table -->
   <div class="card p-3">
     <h5>Top 10 Card Issuers</h5>
     <table class="table table-bordered table-sm">
       <thead class="table-light">
         <tr>
           <th>VLE Name</th>
-          <th>No. of Cards Issued</th>
+          <th>Cards Issued</th>
           <th>Area</th>
         </tr>
       </thead>
@@ -74,85 +71,72 @@ body { background:#f4f6f9; }
 </div>
 
 <script>
-const API_URL =
-"https://nicforms.nic.in/nicforms_designer/api/api.php?form_id=enRhYmxlNjk2YmM0NjUzOTIwZDIwMjYwMTE3MTE=&serviceCode=d6fc2b65bcbcae2a8a8c29aa5b9587e0427b34899d0efbd66f236cbe8a2301d7&recordNo=0";
-
-fetch(API_URL)
+fetch("getData.php")
 .then(res => res.json())
 .then(data => {
   const records = data.output || [];
-  const today = new Date();
-  const currentWeekStart = new Date(today);
-  currentWeekStart.setDate(today.getDate() - today.getDay());
+  let total = 0;
 
-  let grandTotal = 0;
-  const areaTotals = {};
-  const vleTotals = {};
-  const weekDateTotals = {};
-  const monthWeekTotals = { "Week 1":0,"Week 2":0,"Week 3":0,"Week 4":0,"Week 5":0 };
+  const area = {}, vle = {}, week = {}, month = {
+    "Week 1":0,"Week 2":0,"Week 3":0,"Week 4":0,"Week 5":0
+  };
+
+  const today = new Date();
+  const weekStart = new Date(today);
+  weekStart.setDate(today.getDate() - today.getDay());
 
   records.forEach(r => {
-    const vle = r["ENTER YOUR NAME "] || "Unknown";
-    const area = r["Select"] || "Unknown Area";
     const cards = Number(r["TOTAL NUMBER OF THE CARD ISSUE TODAY "] || 0);
-    const date = new Date(r["Date Field"]);
+    const areaName = r["Select"] || "Unknown";
+    const vleName = r["ENTER YOUR NAME "] || "Unknown";
+    const d = new Date(r["Date Field"]);
 
-    grandTotal += cards;
+    total += cards;
+    area[areaName] = (area[areaName] || 0) + cards;
 
-    areaTotals[area] = (areaTotals[area] || 0) + cards;
+    if(!vle[vleName]) vle[vleName] = {cards:0, area:areaName};
+    vle[vleName].cards += cards;
 
-    if (!vleTotals[vle]) vleTotals[vle] = { cards:0, area };
-    vleTotals[vle].cards += cards;
-
-    // This week date-wise
-    if (date >= currentWeekStart) {
-      const d = date.toISOString().split("T")[0];
-      weekDateTotals[d] = (weekDateTotals[d] || 0) + cards;
+    if(d >= weekStart){
+      const key = d.toISOString().split("T")[0];
+      week[key] = (week[key] || 0) + cards;
     }
 
-    // This month week-wise
-    if (date.getMonth() === today.getMonth()) {
-      const weekNo = Math.ceil(date.getDate() / 7);
-      monthWeekTotals["Week " + weekNo] += cards;
+    if(d.getMonth() === today.getMonth()){
+      const w = "Week " + Math.ceil(d.getDate()/7);
+      month[w] += cards;
     }
   });
 
-  document.getElementById("totalCards").innerText = grandTotal;
+  document.getElementById("totalCards").innerText = total;
 
-  // Area Chart
   new Chart(areaChart, {
-    type: "bar",
-    data: { labels:Object.keys(areaTotals), datasets:[{label:"Cards Issued", data:Object.values(areaTotals)}] }
+    type:"bar",
+    data:{labels:Object.keys(area),datasets:[{label:"Cards",data:Object.values(area)}]}
   });
 
-  // Top 10 VLE
-  const topVLE = Object.entries(vleTotals).sort((a,b)=>b[1].cards-a[1].cards).slice(0,10);
-  new Chart(vleChart, {
-    type: "bar",
-    data: { labels:topVLE.map(v=>v[0]), datasets:[{label:"Cards Issued", data:topVLE.map(v=>v[1].cards)}] }
+  const top = Object.entries(vle).sort((a,b)=>b[1].cards-a[1].cards).slice(0,10);
+  new Chart(vleChart,{
+    type:"bar",
+    data:{labels:top.map(v=>v[0]),datasets:[{label:"Cards",data:top.map(v=>v[1].cards)}]}
   });
 
-  // Week Date Chart
-  new Chart(weekDateChart, {
-    type: "line",
-    data: { labels:Object.keys(weekDateTotals), datasets:[{label:"Cards Issued", data:Object.values(weekDateTotals)}] }
+  new Chart(weekChart,{
+    type:"line",
+    data:{labels:Object.keys(week),datasets:[{label:"Cards",data:Object.values(week)}]}
   });
 
-  // Month Week Chart
-  new Chart(monthWeekChart, {
-    type: "bar",
-    data: { labels:Object.keys(monthWeekTotals), datasets:[{label:"Cards Issued", data:Object.values(monthWeekTotals)}] }
+  new Chart(monthChart,{
+    type:"bar",
+    data:{labels:Object.keys(month),datasets:[{label:"Cards",data:Object.values(month)}]}
   });
 
-  // Table
   const table = document.getElementById("topTable");
-  topVLE.forEach(v=>{
+  top.forEach(v=>{
     table.innerHTML += `<tr><td>${v[0]}</td><td>${v[1].cards}</td><td>${v[1].area}</td></tr>`;
   });
-})
-.catch(()=>alert("Error loading dashboard"));
+});
 </script>
 
 </body>
 </html>
- 
